@@ -1,6 +1,6 @@
 # DORS — Delegation Online Revocation Service
 
-**Status:** Draft 0.2  
+**Status:** Draft 0.1
 **Spec:** [SPEC.md](./SPEC.md)  
 **Venue:** MCP-I extension / profile proposal
 
