@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.superpowers/
+.claude/
+docs/superpowers/
