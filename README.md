@@ -158,39 +158,86 @@ At L3, a 5-minute TTL means that even if the `delegationKey` is stolen, the blas
 
 ---
 
-## Deployment Topologies
-
-**Self-hosted (L1/L2)**
-Run the DORS responder as a separate process from the MCP server. Keep the status-signing key in a separate secret store. Simple to deploy; suitable for most development and departmental scenarios.
-
-**Edge worker / serverless (L2/L3)**
-Deploy the responder on Cloudflare Workers or equivalent. Status-signing key stays in platform secrets. State records in strongly consistent storage (Durable Objects or D1 — not KV). Resolves status assertions with sub-50ms latency for 95% of the globe.
-
-**Enterprise IdP / HSM-backed (L3)**
-Integrate the DORS endpoint into an existing enterprise IdP (Entra ID, Okta). Status-signing keys in HSM. Revocation actions go through incident response workflows. Supports bulk revocation by affected issuer key identifier.
-
----
-
 ## Repository Structure
 
 ```
 dors/
-├── SPEC.md                  # Full protocol specification (Draft 0.2)
+├── SPEC.md                  # Full protocol specification (Draft 0.1)
 ├── src/
+│   ├── index.ts             # Re-exports all public API
 │   ├── types.ts             # Core interfaces and type definitions
-│   ├── issuer.ts            # VC issuance with MCPIDORSStatusEntry injection
-│   ├── responder.ts         # DORS responder — JWT generation and signing
-│   └── verifier.ts          # Edge verifier logic
-└── worker/
-    └── index.ts             # Cloudflare Workers deployment
+│   ├── issuer.ts            # Credential hash computation, status entry creation
+│   ├── responder.ts         # DORSResponder — status queries, JWT signing, revocation
+│   └── verifier.ts          # Assertion verification and live lookup
+├── package.json
+└── tsconfig.json
+```
+
+---
+
+## Usage
+
+Install the library as a local dependency:
+
+```bash
+npm install ../dors
+```
+
+### Issuer — register a credential with DORS
+
+```typescript
+import { createDORSStatusEntry, createIssuanceRecord } from 'dors';
+
+const statusEntry = createDORSStatusEntry();
+const record = createIssuanceRecord(issuerDid, statusEntry.statusId, compactJws);
+// POST record to DORS service /admin/register
+```
+
+### Responder — answer status queries
+
+```typescript
+import { DORSResponder } from 'dors';
+
+const responder = new DORSResponder({
+  statusAuthorityDid,
+  statusAuthorityKid,
+  privateKey,        // Ed25519 CryptoKey
+  defaultTtlSeconds: 300,
+});
+
+responder.registerIssuance(record);
+const jwt = await responder.queryStatus(query);  // signed compact JWS
+
+// Revocation
+responder.revoke(statusId, 'key_compromise');
+responder.revokeByIssuer(issuerDid, 'key_compromise');  // bulk
+```
+
+### Verifier — validate a stapled assertion
+
+```typescript
+import { verifyDORSAssertion } from 'dors';
+
+const result = await verifyDORSAssertion({
+  assertionJwt,
+  expectedStatusId,
+  credentialCompactJws,
+  statusAuthorityPublicKey,
+  statusAuthorityDid,
+  policy: { maxTtlSeconds: 300, allowedClockSkewSeconds: 60, requireDORS: true, allowLiveLookup: true },
+});
+
+if (!result.valid || result.claims?.status !== 'active') {
+  // reject
+}
 ```
 
 ---
 
 ## Status and Roadmap
 
-- [x] Protocol specification (Draft 0.2)
-- [ ] TypeScript proof of concept
+- [x] Protocol specification (Draft 0.1)
+- [x] TypeScript proof of concept
 - [ ] GitHub Issue on `modelcontextprotocol-identity`
 - [ ] Specification Enhancement Proposal (SEP)
 
